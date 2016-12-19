@@ -21,20 +21,27 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_below="@+id/user"
-        android:text="读出验证码：" />
+        android:text="" />
     
     <TextView
         android:id="@+id/tips"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_below="@+id/number"
-        android:text="提示：" />
+        android:text="" />
 
+    <Button 
+        android:id="@+id/getpwd"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="获取注册码"
+        android:layout_below="@+id/tips" 
+           />
     <Button
         android:id="@+id/reg"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_below="@+id/tips"
+        android:layout_below="@+id/getpwd"
         android:text="注册" />
 
 

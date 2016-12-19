@@ -8,6 +8,7 @@ public class Application extends android.app.Application {
 
 	@Override
 	public void onCreate() {
+		super.onCreate();
 		SpeechUtility.createUtility(this, SpeechConstant.APPID +getString(R.string.app_id)); 
 	}
 

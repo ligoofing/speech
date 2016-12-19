@@ -1,5 +1,9 @@
 package com.gaofeng.speechcheck;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import android.app.Activity;
 import android.os.Bundle;
 import android.os.Environment;
@@ -11,14 +15,13 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.iflytek.cloud.ErrorCode;
 import com.iflytek.cloud.InitListener;
 import com.iflytek.cloud.SpeakerVerifier;
 import com.iflytek.cloud.SpeechConstant;
 import com.iflytek.cloud.SpeechError;
-import com.iflytek.cloud.SpeechUtility;
+import com.iflytek.cloud.SpeechListener;
 import com.iflytek.cloud.VerifierListener;
 import com.iflytek.cloud.VerifierResult;
 
@@ -31,6 +34,7 @@ public class MainActivity extends Activity implements OnClickListener {
 	TextView mUserView;
 	TextView mNumberView;
 	TextView mTipsView;
+	Button mGetPwdView;
 	Button mRegButton;
 	Button mCheckButton;
 	
@@ -41,7 +45,7 @@ public class MainActivity extends Activity implements OnClickListener {
         setContentView(R.layout.activity_main);
         initview();
         mCheck = new CheckUtil(this);
-        
+        mUserView.setText("用户：" + mCheck.mAuthId);
 		// 首先创建SpeakerVerifier对象  
 		mVerifier = SpeakerVerifier.createVerifier(this, new InitListener() {
 			
@@ -56,8 +60,6 @@ public class MainActivity extends Activity implements OnClickListener {
 				}
 			}
 		}); 
-		// 通过setParameter设置密码类型，pwdType的取值为1、2、3，分别表示文本密码、自由说和数字密码  
-		mVerifier.setParameter(SpeechConstant.ISV_PWDT, "" + mCheck.mPwdType);   
     }
 
     
@@ -65,9 +67,11 @@ public class MainActivity extends Activity implements OnClickListener {
 		mUserView = (TextView) findViewById(R.id.user);
 		mNumberView = (TextView) findViewById(R.id.number);
 		mTipsView = (TextView) findViewById(R.id.tips);
+		mGetPwdView = (Button) findViewById(R.id.getpwd);
 		mRegButton = (Button) findViewById(R.id.reg);
 		mCheckButton = (Button) findViewById(R.id.check);
 		
+		mGetPwdView.setOnClickListener(this);
 		mRegButton.setOnClickListener(this);
 		mCheckButton.setOnClickListener(this);
 	}
@@ -77,6 +81,11 @@ public class MainActivity extends Activity implements OnClickListener {
 	public void onClick(View v) {
 		switch(v.getId()){
 		
+		    case R.id.getpwd:
+		    	Message msgGetPwd = new Message();
+		    	msgGetPwd.what = GETPWD;
+		    	mHandle.sendMessage(msgGetPwd);
+		    	break;
 		    case R.id.reg:
 		    	Message msgReg = new Message();
 		    	msgReg.what = REGMSG;
@@ -93,6 +102,7 @@ public class MainActivity extends Activity implements OnClickListener {
 		
 	}
 	
+	private static final int GETPWD = 3;
 	private static final int REGMSG = 1;
 	private static final int CHECKMSG = 2;
 	private Handler mHandle = new Handler(){
@@ -106,6 +116,9 @@ public class MainActivity extends Activity implements OnClickListener {
 				break;
 			case CHECKMSG:
 				check();
+				break;
+			case GETPWD:
+				getCheckCode();
 				break;
 			}
 			
@@ -123,20 +136,20 @@ public class MainActivity extends Activity implements OnClickListener {
 
 		// 数字密码注册需要传入密码
 		if (TextUtils.isEmpty(mCheck.mNumPwd)) {
-			mCheck.showTip("获取随机密码失败！");
+			mCheck.showTip("获取训练密码失败！");
 			return;
 		}
 		mVerifier.setParameter(SpeechConstant.ISV_PWD, mCheck.mNumPwd);
 		mNumberView.setText("请读出："
 				+ mCheck.mNumPwd.substring(0, 8));
 		mTipsView.setText("训练 第" + 1 + "遍，剩余4遍");
-		
 		// 设置auth_id，不能设置为空
 		mVerifier.setParameter(SpeechConstant.AUTH_ID, mCheck.mAuthId);
 		// 设置业务类型为注册
 		mVerifier.setParameter(SpeechConstant.ISV_SST, "train");
 		// 设置声纹密码类型
 		mVerifier.setParameter(SpeechConstant.ISV_PWDT, "" + mCheck.mPwdType);
+		mCheck.showTip("mPwdType = " + mCheck.mPwdType);
 		// 开始注册
 		mVerifier.startListening(mRegisterListener);
 	}
@@ -156,7 +169,7 @@ public class MainActivity extends Activity implements OnClickListener {
 		// 数字密码注册需要传入密码
 		String verifyPwd = mVerifier.generatePassword(8);
 		mVerifier.setParameter(SpeechConstant.ISV_PWD, verifyPwd);
-		mTipsView.setText("请读出："
+		mNumberView.setText("请读出："
 				+ verifyPwd);
 		
 		// 设置auth_id，不能设置为空
@@ -165,6 +178,53 @@ public class MainActivity extends Activity implements OnClickListener {
 		// 开始验证
 		mVerifier.startListening(mVerifyListener);
 	}
+	
+	private void getCheckCode(){
+		// 获取密码之前先终止之前的注册或验证过程
+		mVerifier.cancel();
+		// 清空参数
+		mVerifier.setParameter(SpeechConstant.PARAMS, null);
+		mVerifier.setParameter(SpeechConstant.ISV_PWDT, "" + mCheck.mPwdType);
+		mVerifier.getPasswordList(mPwdListenter);
+	}
+	
+	private SpeechListener mPwdListenter = new SpeechListener() {
+		@Override
+		public void onEvent(int eventType, Bundle params) {
+		}
+		
+		@Override
+		public void onBufferReceived(byte[] buffer) {
+			
+			String result = new String(buffer);
+			StringBuffer numberString = new StringBuffer();
+			try {
+				JSONObject object = new JSONObject(result);
+				if (!object.has("num_pwd")) {
+					return;
+				}
+				
+				JSONArray pwdArray = object.optJSONArray("num_pwd");
+				numberString.append(pwdArray.get(0));
+				for (int i = 1; i < pwdArray.length(); i++) {
+					numberString.append("-" + pwdArray.get(i));
+				}
+			} catch (JSONException e) {
+				e.printStackTrace();
+			}
+			mCheck.mNumPwd = numberString.toString();
+			mCheck.mNumPwdSegs = mCheck.mNumPwd.split("-");
+			mCheck.showTip("您的密码：\n" + mCheck.mNumPwd);
+		}
+
+		@Override
+		public void onCompleted(SpeechError error) {
+			
+			if (null != error && ErrorCode.SUCCESS != error.getErrorCode()) {
+				mCheck.showTip("获取失败：" + error.getErrorCode());
+			}
+		}
+	};
 	
 	private VerifierListener mVerifyListener = new VerifierListener() {
 
